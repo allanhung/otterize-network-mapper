@@ -1,0 +1,27 @@
+ARG ARCH="amd64"
+ARG OS="linux"
+
+FROM golang:1.23-alpine AS build
+ARG OIO_VERSIONTAG=3.0.19
+ARG ONM_VERSIONTAG=3.0.19
+ENV CGO_ENABLED=1
+#ENV CI=dev
+RUN apk add --no-cache ca-certificates git protoc
+RUN apk add build-base libpcap-dev patch
+RUN mkdir -p /go/src/github.com/otterize
+RUN cd /go/src/github.com/otterize && git clone --depth 1 -b v${OIO_VERSIONTAG} https://github.com/allanhung/otterize-intents-operator intents-operator
+RUN cd /go/src/github.com/otterize && git clone --depth 1 -b v${ONM_VERSIONTAG} https://github.com/allanhung/otterize-network-mapper network-mapper
+WORKDIR /go/src/github.com/otterize/network-mapper/src
+RUN echo "replace github.com/otterize/intents-operator/src => /go/src/github.com/otterize/intents-operator/src" >> go.mod
+RUN go mod tidy
+RUN go build -o ../bin/sniffer ./sniffer/cmd
+RUN echo -n v${ONM_VERSIONTAG} > /version
+
+FROM alpine AS release
+RUN apk add --no-cache ca-certificates libpcap
+WORKDIR /
+COPY --from=build /go/src/github.com/otterize/network-mapper/bin/sniffer /main
+COPY --from=build /version .
+RUN chmod +x /main
+
+ENTRYPOINT ["/main"]
