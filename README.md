@@ -14,6 +14,9 @@ Maps pod-to-pod traffic, pod-to-Internet traffic, and even AWS IAM traffic, with
 * How does the network mapper work?
   * [Components](#components)
   * [Service name resolution](#service-name-resolution)
+* [MySQL Backend Storage](#mysql-backend-storage)
+  * [Configuration](#mysql-configuration)
+  * [GraphQL API](#mysql-graphql-api)
 * [Exporting a network map](#exporting-a-network-map)
 * [Learn more](#learn-more)
 * [Contributing](#contributing)
@@ -135,6 +138,80 @@ Service names are resolved in one of two ways:
 For example, if you have a `Deployment` named `client`, which then creates and owns a `ReplicaSet`,
 which then creates and owns a `Pod`, then the service name for that pod is `client` - same as the name of the `Deployment`.
 The goal is to generate a mapping that speaks in the same language that dev teams use.
+
+## MySQL Backend Storage
+
+The network mapper now supports persistent storage of external traffic intents using MySQL. This feature enables long-term storage and querying of external traffic patterns.
+
+### MySQL Configuration
+
+Enable MySQL backend by setting the following environment variables:
+
+```bash
+OTTERIZE_DB_ENABLED=true              # Enable MySQL storage (default: true)
+OTTERIZE_DB_HOST=mysql-host           # MySQL host (default: 127.0.0.1)
+OTTERIZE_DB_PORT=3306                 # MySQL port (default: 3306)
+OTTERIZE_DB_USERNAME=root             # Database username (default: root)
+OTTERIZE_DB_PASSWORD=password         # Database password (default: password)
+OTTERIZE_DB_DATABASE=otterise         # Database name (default: otterise)
+```
+
+Or via Helm chart values:
+
+```yaml
+mapper:
+  mysql:
+    enabled: true
+    host: mysql-host
+    port: 3306
+    username: root
+    password: password
+    database: otterise
+```
+
+The MySQL backend automatically:
+- Creates the necessary database tables on startup
+- Filters private IP addresses (only stores genuine external traffic)
+- Implements local caching for improved performance
+- Supports optional GitHub Actions webhook integration for CI/CD workflows
+
+### MySQL GraphQL API
+
+Query external traffic intents via GraphQL:
+
+```graphql
+query {
+  externalIntents {
+    client {
+      name
+      namespace
+      kind
+    }
+    dnsName
+    lastSeen
+  }
+}
+```
+
+Example response:
+
+```json
+{
+  "data": {
+    "externalIntents": [
+      {
+        "client": {
+          "name": "frontend",
+          "namespace": "production",
+          "kind": "Deployment"
+        },
+        "dnsName": "api.example.com",
+        "lastSeen": "2025-01-12T10:30:00Z"
+      }
+    ]
+  }
+}
+```
 
 ## Exporting a network map
 
