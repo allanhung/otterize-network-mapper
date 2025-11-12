@@ -24,6 +24,7 @@ import (
 	"github.com/otterize/network-mapper/src/mapper/pkg/incomingtrafficholder"
 	"github.com/otterize/network-mapper/src/mapper/pkg/metadatareporter"
 	"github.com/otterize/network-mapper/src/mapper/pkg/metrics_collection_traffic"
+	"github.com/otterize/network-mapper/src/mapper/pkg/mysqlstore"
 	"github.com/otterize/network-mapper/src/mapper/pkg/networkpolicyreport"
 	"github.com/otterize/network-mapper/src/mapper/pkg/resourcevisibility"
 	"github.com/otterize/network-mapper/src/mapper/pkg/webhook_traffic"
@@ -178,6 +179,16 @@ func main() {
 	trafficCollector := traffic.NewCollector()
 	serviceIdResolver := serviceidresolver.NewResolver(mgr.GetClient())
 
+	var dbClient *mysqlstore.MySQLIntentStore
+	if viper.GetBool(config.DbEnabledKey) {
+		dbConfig := mysqlstore.ConfigFromViper()
+		dbClient, err = mysqlstore.NewMySQLIntentStore(dbConfig)
+		if err != nil {
+			logrus.WithError(err).Panic("Failed to initialize db client")
+		}
+		externalTrafficIntentsHolder.RegisterNotifyIntents(dbClient.LogExternalTrafficIntentsCallback)
+	}
+
 	resolver := resolvers.NewResolver(
 		kubeFinder,
 		serviceIdResolver,
@@ -189,10 +200,14 @@ func main() {
 		dnsCache,
 		incomingTrafficIntentsHolder,
 		trafficCollector,
+		dbClient,
 	)
 	resolver.Register(mapperServer)
 
 	metricsServer := echo.New()
+	mapperServer.Server.IdleTimeout = viper.GetDuration(config.HttpIdleTimeoutKey)
+	mapperServer.Server.ReadTimeout = viper.GetDuration(config.HttpReadTimeoutKey)
+	mapperServer.Server.WriteTimeout = viper.GetDuration(config.HttpWriteTimeoutKey)
 	metricsServer.HideBanner = true
 	metricsServer.GET("/metrics", echoprometheus.NewHandler())
 

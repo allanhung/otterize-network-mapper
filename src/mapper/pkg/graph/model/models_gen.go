@@ -42,6 +42,18 @@ type Destination struct {
 	SrcPorts        []int64   `json:"srcPorts,omitempty"`
 }
 
+type ExternalClient struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Kind      string `json:"kind"`
+}
+
+type ExternalIntent struct {
+	Client   *ExternalClient `json:"client"`
+	DNSName  string          `json:"dnsName"`
+	LastSeen string          `json:"lastSeen"`
+}
+
 type GCPOperation struct {
 	Resource    string          `json:"resource"`
 	Permissions []string        `json:"permissions"`

@@ -235,6 +235,37 @@ func (r *queryResolver) Health(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// ExternalIntents is the resolver for the externalIntents field.
+func (r *queryResolver) ExternalIntents(ctx context.Context) ([]model.ExternalIntent, error) {
+	if r.dbClient == nil {
+		logrus.Warning("Database client not initialized, returning empty external intents")
+		return []model.ExternalIntent{}, nil
+	}
+
+	records, err := r.dbClient.GetExternalIntents(ctx)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to get external intents from database")
+		return []model.ExternalIntent{}, errors.Wrap(err)
+	}
+
+	// Convert database records to GraphQL model
+	intents := make([]model.ExternalIntent, 0, len(records))
+	for _, record := range records {
+		intent := model.ExternalIntent{
+			Client: &model.ExternalClient{
+				Name:      record.ClientName,
+				Namespace: record.ClientNamespace,
+				Kind:      record.ClientKind,
+			},
+			DNSName:  record.DNSName,
+			LastSeen: record.LastSeen.Format("2006-01-02T15:04:05Z07:00"), // RFC3339 format
+		}
+		intents = append(intents, intent)
+	}
+
+	return intents, nil
+}
+
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 

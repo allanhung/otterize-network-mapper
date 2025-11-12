@@ -18,6 +18,7 @@ import (
 	"github.com/otterize/network-mapper/src/mapper/pkg/incomingtrafficholder"
 	"github.com/otterize/network-mapper/src/mapper/pkg/intentsstore"
 	"github.com/otterize/network-mapper/src/mapper/pkg/kubefinder"
+	"github.com/otterize/network-mapper/src/mapper/pkg/mysqlstore"
 	"github.com/otterize/network-mapper/src/shared/isrunningonaws"
 	"golang.org/x/sync/errgroup"
 )
@@ -37,6 +38,7 @@ type Resolver struct {
 	azureIntentsHolder           *azureintentsholder.AzureIntentsHolder
 	dnsCache                     *dnscache.DNSCache
 	trafficCollector             *traffic.Collector
+	dbClient                     *mysqlstore.MySQLIntentStore
 	dnsCaptureResults            chan model.CaptureResults
 	tcpCaptureResults            chan model.CaptureTCPResults
 	socketScanResults            chan model.SocketScanResults
@@ -62,6 +64,7 @@ func NewResolver(
 	dnsCache *dnscache.DNSCache,
 	incomingTrafficHolder *incomingtrafficholder.IncomingTrafficIntentsHolder,
 	trafficCollector *traffic.Collector,
+	dbClient *mysqlstore.MySQLIntentStore,
 ) *Resolver {
 	r := &Resolver{
 		kubeFinder:                   kubeFinder,
@@ -83,6 +86,7 @@ func NewResolver(
 		azureIntentsHolder:           azureIntentsHolder,
 		trafficCollector:             trafficCollector,
 		dnsCache:                     dnsCache,
+		dbClient:                     dbClient,
 		isRunningOnAws:               isrunningonaws.Check(),
 	}
 	r.gotResultsCtx, r.gotResultsSignal = context.WithCancel(context.Background())

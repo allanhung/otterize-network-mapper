@@ -71,7 +71,7 @@ func (k *KubeFinder) initIndexes(ctx context.Context) error {
 		pod := object.(*corev1.Pod)
 
 		// host network pods use their node's IP address, it's not safe to assume this IP is unique to this pod
-		if pod.Spec.HostNetwork || pod.DeletionTimestamp != nil || pod.Status.Phase != corev1.PodRunning {
+		if pod.Spec.HostNetwork || pod.DeletionTimestamp != nil || (pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodPending) {
 			return res
 		}
 		for _, ip := range pod.Status.PodIPs {
@@ -430,6 +430,13 @@ func (k *KubeFinder) ResolveServiceAddressToPods(ctx context.Context, fqdn strin
 		err := k.client.Get(ctx, serviceNamespacedName, service)
 		if err != nil {
 			return nil, types.NamespacedName{}, errors.Wrap(err)
+		}
+		if service.Spec.Type == corev1.ServiceTypeExternalName {
+			externalName := service.Spec.ExternalName
+			if strings.HasSuffix(externalName, clusterDomain) {
+				return k.ResolveServiceAddressToPods(ctx, externalName)
+			}
+			return []corev1.Pod{}, serviceNamespacedName, nil
 		}
 		pods, err := k.ResolveServiceToPods(ctx, service)
 		if err != nil {

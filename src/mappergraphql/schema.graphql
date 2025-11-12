@@ -249,3 +249,19 @@ type Mutation {
     reportGCPOperation(operation: [GCPOperation!]!): Boolean!
     reportTrafficLevelResults(results: TrafficLevelResults!): Boolean!
 }
+
+type ExternalClient {
+  name: String!
+  namespace: String!
+  kind: String!
+}
+
+type ExternalIntent {
+  client: ExternalClient!
+  dnsName: String!
+  lastSeen: String!
+}
+
+extend type Query {
+  externalIntents: [ExternalIntent!]!
+}
