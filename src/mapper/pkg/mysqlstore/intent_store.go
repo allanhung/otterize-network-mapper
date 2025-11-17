@@ -362,8 +362,46 @@ type ExternalIntentRecord struct {
 	LastSeen        time.Time
 }
 
+// CleanupExpiredIntents removes intents older than the configured retention period
+func (s *MySQLIntentStore) CleanupExpiredIntents(ctx context.Context) error {
+	if s.config.RetentionDays <= 0 {
+		logrus.Debug("Retention cleanup skipped: retention days not configured or invalid")
+		return nil
+	}
+
+	cutoffDate := time.Now().AddDate(0, 0, -s.config.RetentionDays)
+	query := `
+		DELETE FROM external_traffic_intents
+		WHERE last_seen < ?
+	`
+
+	result, err := s.Db.ExecContext(ctx, query, cutoffDate)
+	if err != nil {
+		logrus.WithError(err).Error("failed to cleanup expired intents")
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logrus.WithError(err).Warn("failed to get rows affected count")
+	} else if rowsAffected > 0 {
+		logrus.WithFields(logrus.Fields{
+			"rows_deleted":   rowsAffected,
+			"retention_days": s.config.RetentionDays,
+			"cutoff_date":    cutoffDate.Format("2006-01-02"),
+		}).Info("Cleaned up expired external traffic intents")
+	}
+
+	return nil
+}
+
 // GetExternalIntents retrieves all external traffic intents from the database
 func (s *MySQLIntentStore) GetExternalIntents(ctx context.Context) ([]ExternalIntentRecord, error) {
+	// Cleanup expired intents before querying
+	if err := s.CleanupExpiredIntents(ctx); err != nil {
+		logrus.WithError(err).Warn("failed to cleanup expired intents, continuing with query")
+	}
+
 	query := `
 		SELECT client_name, client_namespace, client_kind, dns_name, last_seen
 		FROM external_traffic_intents

@@ -92,6 +92,8 @@ const (
 	GhaRepoDefault                            = ""
 	GhaEventTypeKey                           = "gha-event-type"
 	GhaEventTypeDefault                       = "recieveNewIntents"
+	ExternalIntentsRetentionDaysKey           = "external-intents-retention-days"
+	ExternalIntentsRetentionDaysDefault       = 90
 )
 
 var excludedNamespaces *goset.Set[string]
@@ -142,6 +144,7 @@ func init() {
 	viper.SetDefault(GhaOwnerKey, GhaOwnerDefault)
 	viper.SetDefault(GhaRepoKey, GhaRepoDefault)
 	viper.SetDefault(GhaEventTypeKey, GhaEventTypeDefault)
+	viper.SetDefault(ExternalIntentsRetentionDaysKey, ExternalIntentsRetentionDaysDefault)
 
 	excludedNamespaces = goset.FromSlice(viper.GetStringSlice(ExcludedNamespacesKey))
 }

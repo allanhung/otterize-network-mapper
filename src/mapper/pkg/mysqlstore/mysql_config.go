@@ -19,6 +19,7 @@ type Config struct {
 	GhaOwner               string
 	GhaRepo                string
 	GhaEventType           string
+	RetentionDays          int
 }
 
 func ConfigFromViper() Config {
@@ -36,5 +37,6 @@ func ConfigFromViper() Config {
 		GhaOwner:               viper.GetString(config.GhaOwnerKey),
 		GhaRepo:                viper.GetString(config.GhaRepoKey),
 		GhaEventType:           viper.GetString(config.GhaEventTypeKey),
+		RetentionDays:          viper.GetInt(config.ExternalIntentsRetentionDaysKey),
 	}
 }
