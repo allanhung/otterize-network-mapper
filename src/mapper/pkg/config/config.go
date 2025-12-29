@@ -95,7 +95,7 @@ const (
 	ExternalIntentsRetentionDaysKey           = "external-intents-retention-days"
 	ExternalIntentsRetentionDaysDefault       = 90
 	DNSResolutionFailureCacheTTLSecondsKey    = "dns-resolution-failure-cache-ttl"
-	DNSResolutionFailureCacheTTLSecondsDefault = 300
+	DNSResolutionFailureCacheTTLSecondsDefault = 60
 )
 
 var excludedNamespaces *goset.Set[string]

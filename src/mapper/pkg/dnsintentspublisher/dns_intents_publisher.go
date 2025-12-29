@@ -14,6 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,11 +23,16 @@ const (
 	hasAnyDnsIntentsIndexValue = "true"
 )
 
+type dnsResolutionFailureCacheEntry struct {
+	timestamp time.Time
+}
+
 type Publisher struct {
-	client         client.Client
-	dnsCache       *dnscache.DNSCache
-	updateInterval time.Duration
-	resolver       Resolver
+	client                    client.Client
+	dnsCache                  *dnscache.DNSCache
+	updateInterval            time.Duration
+	resolver                  Resolver
+	dnsResolutionFailureCache sync.Map // map[string]dnsResolutionFailureCacheEntry
 }
 
 type Resolver interface {
@@ -177,6 +183,16 @@ func (p *Publisher) appendResolvedIps(dnsName string, resolvedIPsMap map[string]
 	}
 
 	if len(resolvedIPs) == 0 && !p.isWildcardDNS(dnsName) {
+		// Check cache for failed DNS resolution attempts
+		if cacheEntry, found := p.dnsResolutionFailureCache.Load(dnsName); found {
+			entry := cacheEntry.(dnsResolutionFailureCacheEntry)
+			cacheTTLSeconds := viper.GetInt(config.DNSResolutionFailureCacheTTLSecondsKey)
+			if time.Since(entry.timestamp) < time.Duration(cacheTTLSeconds)*time.Second {
+				logrus.WithField("dnsName", dnsName).Debugf("Skipping DNS resolution (cached failure, age: %v)", time.Since(entry.timestamp))
+				return false
+			}
+		}
+
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		logrus.WithField("dnsName", dnsName).Debug("DNS cache miss, resolving it ourselves")
@@ -184,6 +200,10 @@ func (p *Publisher) appendResolvedIps(dnsName string, resolvedIPsMap map[string]
 		ipaddrs, err := p.resolver.LookupIPAddr(ctxTimeout, dnsName)
 		if err != nil {
 			logrus.WithError(err).WithField("dnsName", dnsName).Error("Failed to resolve DNS")
+			// Cache the failed resolution attempt
+			p.dnsResolutionFailureCache.Store(dnsName, dnsResolutionFailureCacheEntry{
+				timestamp: time.Now(),
+			})
 			return false
 		}
 
