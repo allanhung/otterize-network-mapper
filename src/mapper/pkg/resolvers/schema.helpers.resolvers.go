@@ -473,9 +473,24 @@ func (r *Resolver) resolveOtterizeIdentityForDestinationAddress(ctx context.Cont
 		IsService: lo.ToPtr(true),
 		ExtraInfo: lo.ToPtr("resolveOtterizeIdentityForDestinationAddress"),
 	}
+
+	// Check cache for failed DNS resolution attempts
+	if cacheEntry, found := r.dnsResolutionFailureCache.Load(destAddress); found {
+		entry := cacheEntry.(dnsResolutionFailureCacheEntry)
+		cacheTTLSeconds := viper.GetInt(config.DNSResolutionFailureCacheTTLSecondsKey)
+		if time.Since(entry.timestamp) < time.Duration(cacheTTLSeconds)*time.Second {
+			logrus.Debugf("Skipping DNS resolution for %s (cached failure, age: %v)", destAddress, time.Since(entry.timestamp))
+			return nil, false, nil
+		}
+	}
+
 	pods, serviceName, err := r.kubeFinder.ResolveServiceAddressToPods(ctx, destAddress)
 	if err != nil {
-		logrus.WithError(err).Warningf("Could not resolve service address %s", destAddress)
+		logrus.WithError(err).Debugf("Could not resolve service address %s", destAddress)
+		// Cache the failed resolution attempt
+		r.dnsResolutionFailureCache.Store(destAddress, dnsResolutionFailureCacheEntry{
+			timestamp: time.Now(),
+		})
 		// Intentionally no error return
 		return nil, false, nil
 	}
