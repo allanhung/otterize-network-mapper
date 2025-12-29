@@ -94,6 +94,8 @@ const (
 	GhaEventTypeDefault                       = "recieveNewIntents"
 	ExternalIntentsRetentionDaysKey           = "external-intents-retention-days"
 	ExternalIntentsRetentionDaysDefault       = 90
+	DNSResolutionFailureCacheTTLSecondsKey    = "dns-resolution-failure-cache-ttl"
+	DNSResolutionFailureCacheTTLSecondsDefault = 300
 )
 
 var excludedNamespaces *goset.Set[string]
@@ -145,6 +147,7 @@ func init() {
 	viper.SetDefault(GhaRepoKey, GhaRepoDefault)
 	viper.SetDefault(GhaEventTypeKey, GhaEventTypeDefault)
 	viper.SetDefault(ExternalIntentsRetentionDaysKey, ExternalIntentsRetentionDaysDefault)
+	viper.SetDefault(DNSResolutionFailureCacheTTLSecondsKey, DNSResolutionFailureCacheTTLSecondsDefault)
 
 	excludedNamespaces = goset.FromSlice(viper.GetStringSlice(ExcludedNamespacesKey))
 }

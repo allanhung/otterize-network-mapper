@@ -21,11 +21,17 @@ import (
 	"github.com/otterize/network-mapper/src/mapper/pkg/mysqlstore"
 	"github.com/otterize/network-mapper/src/shared/isrunningonaws"
 	"golang.org/x/sync/errgroup"
+	"sync"
+	"time"
 )
 
 // This file will not be regenerated automatically.
 //
 // It serves as dependency injection for your app, add any dependencies you require here.
+
+type dnsResolutionFailureCacheEntry struct {
+	timestamp time.Time
+}
 
 type Resolver struct {
 	kubeFinder                   *kubefinder.KubeFinder
@@ -51,6 +57,7 @@ type Resolver struct {
 	gotResultsCtx                context.Context
 	gotResultsSignal             context.CancelFunc
 	isRunningOnAws               bool
+	dnsResolutionFailureCache    sync.Map // map[string]dnsResolutionFailureCacheEntry
 }
 
 func NewResolver(
