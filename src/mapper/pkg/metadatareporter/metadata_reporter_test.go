@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 )
 
 type MetadataReporterTestSuite struct {
@@ -65,28 +66,31 @@ func (s *MetadataReporterTestSuite) TestReportMetadata() {
 		},
 	}
 
-	// expected list endpoints (by pod name) for the service ips
-	endpoints := []corev1.Endpoints{
+	// expected list endpoint slices (by pod name) for the service ips
+	endpointSlices := []discoveryv1.EndpointSlice{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-service",
 				Namespace: "test-namespace",
+				Labels: map[string]string{
+					discoveryv1.LabelServiceName: "test-service",
+				},
 			},
 		},
 	}
 
-	// Mock endpoints for the pods
+	// Mock endpoint slices for the pods
 	for _, pod := range pods {
 		// expect client list with pod name (using endpointsPodNamesIndexField)
 		// expect with the pod name
 		s.k8sClient.EXPECT().List(
 			gomock.Any(),
-			gomock.Eq(&corev1.EndpointsList{}),
+			gomock.Eq(&discoveryv1.EndpointSliceList{}),
 			gomock.Eq(client.InNamespace(pod.Namespace)),
 			gomock.Eq(client.MatchingFields{endpointsPodNamesIndexField: pod.Name}),
 		).Do(
-			func(ctx context.Context, list *corev1.EndpointsList, _ ...any) {
-				list.Items = endpoints
+			func(ctx context.Context, list *discoveryv1.EndpointSliceList, _ ...any) {
+				list.Items = endpointSlices
 			})
 	}
 
@@ -233,12 +237,15 @@ func (s *MetadataReporterTestSuite) TestReportMetadata_Cache() {
 		},
 	}
 
-	// Mock endpoints for the pods
-	endpoints := []corev1.Endpoints{
+	// Mock endpoint slices for the pods
+	endpointSlices := []discoveryv1.EndpointSlice{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-service",
 				Namespace: "test-namespace",
+				Labels: map[string]string{
+					discoveryv1.LabelServiceName: "test-service",
+				},
 			},
 		},
 	}
@@ -246,12 +253,12 @@ func (s *MetadataReporterTestSuite) TestReportMetadata_Cache() {
 	for _, pod := range pods {
 		s.k8sClient.EXPECT().List(
 			gomock.Any(),
-			gomock.Eq(&corev1.EndpointsList{}),
+			gomock.Eq(&discoveryv1.EndpointSliceList{}),
 			gomock.Eq(client.InNamespace(pod.Namespace)),
 			gomock.Eq(client.MatchingFields{endpointsPodNamesIndexField: pod.Name}),
 		).Do(
-			func(ctx context.Context, list *corev1.EndpointsList, _ ...any) {
-				list.Items = endpoints
+			func(ctx context.Context, list *discoveryv1.EndpointSliceList, _ ...any) {
+				list.Items = endpointSlices
 			}).Times(2)
 	}
 

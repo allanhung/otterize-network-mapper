@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,22 +33,42 @@ func NewEndpointsReconciler(client client.Client, resolver serviceidresolver.Ser
 
 func (r *EndpointsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Endpoints{}).
-		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(r.mapServicesToEndpoints)).
+		For(&discoveryv1.EndpointSlice{}).
+		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(r.mapServicesToEndpointSlices)).
 		WithOptions(controller.Options{RecoverPanic: lo.ToPtr(true)}).
 		Complete(r)
 }
 
-func (r *EndpointsReconciler) mapServicesToEndpoints(_ context.Context, obj client.Object) []reconcile.Request {
+func (r *EndpointsReconciler) mapServicesToEndpointSlices(ctx context.Context, obj client.Object) []reconcile.Request {
 	service := obj.(*corev1.Service)
-	logrus.Debugf("Enqueueing endpoints for service %s", service.Name)
+	logrus.Debugf("Enqueueing endpoint slices for service %s", service.Name)
 
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: service.GetNamespace(), Name: service.GetName()}}}
+	// List all EndpointSlices for this service
+	var endpointSlices discoveryv1.EndpointSliceList
+	err := r.List(ctx, &endpointSlices, client.InNamespace(service.GetNamespace()), client.MatchingLabels{
+		discoveryv1.LabelServiceName: service.GetName(),
+	})
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to list endpoint slices for service %s", service.Name)
+		return []reconcile.Request{}
+	}
+
+	requests := make([]reconcile.Request, 0, len(endpointSlices.Items))
+	for _, endpointSlice := range endpointSlices.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: endpointSlice.GetNamespace(),
+				Name:      endpointSlice.GetName(),
+			},
+		})
+	}
+
+	return requests
 }
 
 func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	endpoints := &corev1.Endpoints{}
-	err := r.Get(ctx, req.NamespacedName, endpoints)
+	endpointSlice := &discoveryv1.EndpointSlice{}
+	err := r.Get(ctx, req.NamespacedName, endpointSlice)
 	if err != nil && client.IgnoreNotFound(err) == nil {
 		return ctrl.Result{}, nil
 	}
@@ -55,15 +76,15 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err)
 	}
 
-	if endpoints.DeletionTimestamp != nil {
+	if endpointSlice.DeletionTimestamp != nil {
 		return ctrl.Result{}, nil
 	}
 
-	podNames := r.getPodNamesFromEndpoints(endpoints)
+	podNames := r.getPodNamesFromEndpointSlice(endpointSlice)
 	serviceIdentities := make(map[string]serviceidentity.ServiceIdentity)
 	for _, podName := range podNames {
 		pod := &corev1.Pod{}
-		err := r.Get(ctx, client.ObjectKey{Namespace: endpoints.Namespace, Name: podName}, pod)
+		err := r.Get(ctx, client.ObjectKey{Namespace: endpointSlice.Namespace, Name: podName}, pod)
 		if err != nil && client.IgnoreNotFound(err) == nil {
 			return ctrl.Result{}, nil
 		}
@@ -89,18 +110,11 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-func (r *EndpointsReconciler) getPodNamesFromEndpoints(endpoints *corev1.Endpoints) []string {
+func (r *EndpointsReconciler) getPodNamesFromEndpointSlice(endpointSlice *discoveryv1.EndpointSlice) []string {
 	podNames := make([]string, 0)
-	for _, subset := range endpoints.Subsets {
-		for _, address := range subset.Addresses {
-			if address.TargetRef != nil && address.TargetRef.Kind == "Pod" {
-				podNames = append(podNames, address.TargetRef.Name)
-			}
-		}
-		for _, address := range subset.NotReadyAddresses {
-			if address.TargetRef != nil && address.TargetRef.Kind == "Pod" {
-				podNames = append(podNames, address.TargetRef.Name)
-			}
+	for _, endpoint := range endpointSlice.Endpoints {
+		if endpoint.TargetRef != nil && endpoint.TargetRef.Kind == "Pod" {
+			podNames = append(podNames, endpoint.TargetRef.Name)
 		}
 	}
 	return podNames

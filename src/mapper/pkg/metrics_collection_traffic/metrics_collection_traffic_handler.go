@@ -8,6 +8,7 @@ import (
 	"github.com/otterize/network-mapper/src/mapper/pkg/cloudclient"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,18 +77,20 @@ func (r *MetricsCollectionTrafficHandler) HandleAllServicesInNamespace(ctx conte
 	podsToReport := make([]cloudclient.K8sResourceEligibleForMetricsCollectionInput, 0)
 
 	for _, service := range scrapeServices {
-		// Get all the pods relevant to this service
-		endpoints := &corev1.Endpoints{}
-		err = r.Client.Get(ctx, client.ObjectKey{Namespace: service.Namespace, Name: service.Name}, endpoints)
-		if k8serrors.IsNotFound(err) {
-			continue
-		}
-
+		// Get all the EndpointSlices relevant to this service
+		var endpointSlices discoveryv1.EndpointSliceList
+		err = r.Client.List(ctx, &endpointSlices, client.InNamespace(service.Namespace), client.MatchingLabels{
+			discoveryv1.LabelServiceName: service.Name,
+		})
 		if err != nil {
 			return errors.Wrap(err)
 		}
 
-		endpointsPods, err := r.getEndpointsPods(ctx, endpoints)
+		if len(endpointSlices.Items) == 0 {
+			continue
+		}
+
+		endpointsPods, err := r.getEndpointSlicesPods(ctx, endpointSlices.Items)
 		if err != nil {
 			return errors.Wrap(err)
 		}
@@ -139,31 +142,35 @@ func (r *MetricsCollectionTrafficHandler) reportToCloud(ctx context.Context, nam
 	return nil
 }
 
-func (r *MetricsCollectionTrafficHandler) getEndpointsPods(ctx context.Context, endpoints *corev1.Endpoints) ([]corev1.Pod, error) {
-	addresses := make([]corev1.EndpointAddress, 0)
-	for _, subset := range endpoints.Subsets {
-		addresses = append(addresses, subset.Addresses...)
-		addresses = append(addresses, subset.NotReadyAddresses...)
-	}
-
+func (r *MetricsCollectionTrafficHandler) getEndpointSlicesPods(ctx context.Context, endpointSlices []discoveryv1.EndpointSlice) ([]corev1.Pod, error) {
 	pods := make([]corev1.Pod, 0)
-	for _, address := range addresses {
-		if address.TargetRef == nil || address.TargetRef.Kind != "Pod" {
-			// If we could not find the relevant pod, we just skip to the next one
-			continue
-		}
+	seenPods := make(map[string]bool) // Track seen pods to avoid duplicates
 
-		pod := &corev1.Pod{}
-		err := r.Client.Get(ctx, types.NamespacedName{Name: address.TargetRef.Name, Namespace: address.TargetRef.Namespace}, pod)
-		if k8serrors.IsNotFound(err) {
-			continue
-		}
+	for _, endpointSlice := range endpointSlices {
+		for _, endpoint := range endpointSlice.Endpoints {
+			if endpoint.TargetRef == nil || endpoint.TargetRef.Kind != "Pod" {
+				// If we could not find the relevant pod, we just skip to the next one
+				continue
+			}
 
-		if err != nil {
-			return make([]corev1.Pod, 0), errors.Wrap(err)
-		}
+			podKey := endpoint.TargetRef.Namespace + "/" + endpoint.TargetRef.Name
+			if seenPods[podKey] {
+				continue
+			}
 
-		pods = append(pods, *pod)
+			pod := &corev1.Pod{}
+			err := r.Client.Get(ctx, types.NamespacedName{Name: endpoint.TargetRef.Name, Namespace: endpoint.TargetRef.Namespace}, pod)
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+
+			if err != nil {
+				return make([]corev1.Pod, 0), errors.Wrap(err)
+			}
+
+			seenPods[podKey] = true
+			pods = append(pods, *pod)
+		}
 	}
 	return pods, nil
 }

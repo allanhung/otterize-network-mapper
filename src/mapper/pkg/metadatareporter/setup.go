@@ -5,7 +5,7 @@ import (
 	"github.com/otterize/intents-operator/src/shared/errors"
 	"github.com/otterize/intents-operator/src/shared/serviceidresolver"
 	"github.com/otterize/network-mapper/src/mapper/pkg/cloudclient"
-	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -41,23 +41,18 @@ func Setup(client client.Client, cloudClient cloudclient.CloudClient, resolver s
 func initIndexes(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
-		&corev1.Endpoints{},
+		&discoveryv1.EndpointSlice{},
 		endpointsPodNamesIndexField,
 		func(object client.Object) []string {
 			var res []string
-			endpoints := object.(*corev1.Endpoints)
-			addresses := make([]corev1.EndpointAddress, 0)
-			for _, subset := range endpoints.Subsets {
-				addresses = append(addresses, subset.Addresses...)
-				addresses = append(addresses, subset.NotReadyAddresses...)
-			}
+			endpointSlice := object.(*discoveryv1.EndpointSlice)
 
-			for _, address := range addresses {
-				if address.TargetRef == nil || address.TargetRef.Kind != "Pod" {
+			for _, endpoint := range endpointSlice.Endpoints {
+				if endpoint.TargetRef == nil || endpoint.TargetRef.Kind != "Pod" {
 					continue
 				}
 
-				res = append(res, address.TargetRef.Name)
+				res = append(res, endpoint.TargetRef.Name)
 			}
 
 			return res

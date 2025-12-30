@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sync"
@@ -163,12 +164,17 @@ func (r *MetadataReporter) fetchServiceIPs(ctx context.Context, serviceIdentity 
 
 	serviceNames := goset.NewSet[string]()
 	for _, pod := range pods {
-		endpointsList := &corev1.EndpointsList{}
-		err := r.List(ctx, endpointsList, client.InNamespace(pod.Namespace), client.MatchingFields{endpointsPodNamesIndexField: pod.Name})
+		endpointSliceList := &discoveryv1.EndpointSliceList{}
+		err := r.List(ctx, endpointSliceList, client.InNamespace(pod.Namespace), client.MatchingFields{endpointsPodNamesIndexField: pod.Name})
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
-		serviceNames.Add(lo.Map(endpointsList.Items, func(ep corev1.Endpoints, _ int) string { return ep.Name })...)
+		// Extract service names from EndpointSlice labels
+		for _, eps := range endpointSliceList.Items {
+			if serviceName, ok := eps.Labels[discoveryv1.LabelServiceName]; ok {
+				serviceNames.Add(serviceName)
+			}
+		}
 	}
 
 	for _, serviceName := range serviceNames.Items() {
