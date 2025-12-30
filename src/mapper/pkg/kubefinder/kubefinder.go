@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -198,42 +199,47 @@ func (k *KubeFinder) ResolveIPToService(ctx context.Context, ip string) (*corev1
 }
 
 func (k *KubeFinder) ResolveServiceToPods(ctx context.Context, svc *corev1.Service) ([]corev1.Pod, error) {
-	var endpoints corev1.Endpoints
-	err := k.client.Get(ctx, types.NamespacedName{
-		Namespace: svc.Namespace,
-		Name:      svc.Name,
-	}, &endpoints)
+	var endpointSlices discoveryv1.EndpointSliceList
+	err := k.client.List(ctx, &endpointSlices, client.InNamespace(svc.Namespace), client.MatchingLabels{
+		discoveryv1.LabelServiceName: svc.Name,
+	})
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil, ErrServiceNotFound
-		}
 		return nil, errors.Wrap(err)
 	}
 
-	pods := make([]corev1.Pod, 0)
-
-	addresses := make([]corev1.EndpointAddress, 0)
-	for _, subset := range endpoints.Subsets {
-		addresses = append(addresses, subset.Addresses...)
-		addresses = append(addresses, subset.NotReadyAddresses...)
+	if len(endpointSlices.Items) == 0 {
+		return nil, ErrServiceNotFound
 	}
 
-	for _, address := range addresses {
-		if address.TargetRef == nil || address.TargetRef.Kind != "Pod" {
-			continue
-		}
-		var pod corev1.Pod
-		err := k.client.Get(ctx, types.NamespacedName{Name: address.TargetRef.Name, Namespace: address.TargetRef.Namespace}, &pod)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
+	pods := make([]corev1.Pod, 0)
+	seenPods := sets.New[string]() // Track seen pods to avoid duplicates
+
+	for _, endpointSlice := range endpointSlices.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			if endpoint.TargetRef == nil || endpoint.TargetRef.Kind != "Pod" {
 				continue
 			}
-			return nil, errors.Wrap(err)
+
+			podKey := endpoint.TargetRef.Namespace + "/" + endpoint.TargetRef.Name
+			if seenPods.Has(podKey) {
+				continue
+			}
+
+			var pod corev1.Pod
+			err := k.client.Get(ctx, types.NamespacedName{Name: endpoint.TargetRef.Name, Namespace: endpoint.TargetRef.Namespace}, &pod)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					continue
+				}
+				return nil, errors.Wrap(err)
+			}
+			if pod.DeletionTimestamp != nil {
+				continue
+			}
+
+			seenPods.Insert(podKey)
+			pods = append(pods, pod)
 		}
-		if pod.DeletionTimestamp != nil {
-			continue
-		}
-		pods = append(pods, pod)
 	}
 
 	return pods, nil
@@ -290,8 +296,10 @@ func (k *KubeFinder) ResolveIPToControlPlane(ctx context.Context, ip string) (*c
 }
 
 func (k *KubeFinder) isIPMatchingControlPlaneEndpoints(ctx context.Context, ip string) (bool, error) {
-	var endpoints corev1.Endpoints
-	err := k.client.Get(ctx, types.NamespacedName{Name: apiServerName, Namespace: apiServerNamespace}, &endpoints)
+	var endpointSlices discoveryv1.EndpointSliceList
+	err := k.client.List(ctx, &endpointSlices, client.InNamespace(apiServerNamespace), client.MatchingLabels{
+		discoveryv1.LabelServiceName: apiServerName,
+	})
 	if err != nil {
 		return false, errors.Wrap(err)
 	}
@@ -299,23 +307,25 @@ func (k *KubeFinder) isIPMatchingControlPlaneEndpoints(ctx context.Context, ip s
 	parsedIP := net.ParseIP(ip)
 	controlPlaneCIDRPrefixLength := viper.GetInt(config.ControlPlaneIPv4CidrPrefixLength)
 
-	for _, subset := range endpoints.Subsets {
-		for _, endpointAddress := range subset.Addresses {
-			// check for exact match
-			if endpointAddress.IP == ip {
-				return true, nil
-			}
-
-			// check if IP matches the control plane CIDR
-			parsedEndpointIP := net.ParseIP(endpointAddress.IP)
-			if parsedIP.To4() != nil && parsedEndpointIP.To4() != nil {
-				_, endpointNetwork, err := net.ParseCIDR(fmt.Sprintf("%s/%d", parsedEndpointIP.To4().String(), controlPlaneCIDRPrefixLength))
-				if err != nil {
-					return false, errors.Wrap(err)
+	for _, endpointSlice := range endpointSlices.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			for _, endpointIP := range endpoint.Addresses {
+				// check for exact match
+				if endpointIP == ip {
+					return true, nil
 				}
 
-				if endpointNetwork.Contains(parsedIP) {
-					return true, nil
+				// check if IP matches the control plane CIDR
+				parsedEndpointIP := net.ParseIP(endpointIP)
+				if parsedIP.To4() != nil && parsedEndpointIP.To4() != nil {
+					_, endpointNetwork, err := net.ParseCIDR(fmt.Sprintf("%s/%d", parsedEndpointIP.To4().String(), controlPlaneCIDRPrefixLength))
+					if err != nil {
+						return false, errors.Wrap(err)
+					}
+
+					if endpointNetwork.Contains(parsedIP) {
+						return true, nil
+					}
 				}
 			}
 		}

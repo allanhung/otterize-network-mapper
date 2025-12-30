@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"net"
 	"testing"
 )
@@ -82,7 +83,7 @@ func (s *KubeFinderTestSuite) TestResolveServiceAddressToIps() {
 	podIp0 := "1.1.1.1"
 	podIp1 := "1.1.1.2"
 	podIp2 := "1.1.1.3"
-	s.Require().NoError(s.Mgr.GetClient().List(context.Background(), &corev1.EndpointsList{})) // Workaround: make then client start caching Endpoints, so when we do "WaitForCacheSync" it will actually sync cache"
+	s.Require().NoError(s.Mgr.GetClient().List(context.Background(), &discoveryv1.EndpointSliceList{})) // Workaround: make then client start caching EndpointSlices, so when we do "WaitForCacheSync" it will actually sync cache"
 	s.AddDeploymentWithService("service0", []string{podIp0}, map[string]string{"app": "service0"}, "10.0.0.10")
 	_, _, retPods := s.AddDeploymentWithService("service1", []string{podIp1, podIp2}, map[string]string{"app": "service1"}, "10.0.0.11")
 	s.Require().True(s.Mgr.GetCache().WaitForCacheSync(context.Background()))

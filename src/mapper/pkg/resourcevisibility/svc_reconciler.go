@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	"hash/crc32"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,10 +58,10 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	recorder := mgr.GetEventRecorderFor("intents-operator")
 	r.InjectRecorder(recorder)
 
-	// We subscribe to the Endpoints resource, to make sure that any changes in pods that is selected by a service
+	// We subscribe to the EndpointSlice resource, to make sure that any changes in pods that is selected by a service
 	// will trigger a reconciliation of the namespace.
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Endpoints{}).
+		For(&discoveryv1.EndpointSlice{}).
 		WithOptions(controller.Options{RecoverPanic: lo.ToPtr(true)}).
 		Complete(r)
 }
