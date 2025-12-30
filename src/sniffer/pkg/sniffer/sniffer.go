@@ -50,8 +50,7 @@ func (s *Sniffer) reportCaptureResults(ctx context.Context) {
 			for _, dest := range result.Destinations {
 				if strings.Contains(dest.Destination, domainDebugFilter) {
 					logrus.WithFields(logrus.Fields{
-						"srcHostname": result.SrcHostname,
-						"destination": dest.Destination,
+						"result": result,
 					}).Info("Sending capture result to mapper matching domain-debug-filter")
 				}
 			}
