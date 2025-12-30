@@ -11,6 +11,7 @@ import (
 	"github.com/otterize/network-mapper/src/sniffer/pkg/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,21 @@ func (s *Sniffer) reportCaptureResults(ctx context.Context) {
 		return
 	}
 	logrus.Debugf("Reporting captured requests of %d clients to Mapper", len(results))
+
+	// Check for domain debug filter and log matching entries at INFO level
+	domainDebugFilter := viper.GetString(config.DomainDebugFilterKey)
+	if domainDebugFilter != "" {
+		for _, result := range results {
+			for _, dest := range result.Destinations {
+				if strings.Contains(dest.Destination, domainDebugFilter) {
+					logrus.WithFields(logrus.Fields{
+						"srcHostname": result.SrcHostname,
+						"destination": dest.Destination,
+					}).Info("Sending capture result to mapper matching domain-debug-filter")
+				}
+			}
+		}
+	}
 
 	go func() {
 		timeoutCtx, cancelFunc := context.WithTimeout(ctx, viper.GetDuration(config.CallsTimeoutKey))

@@ -18,6 +18,8 @@ const (
 	HostsMappingRefreshIntervalDefault = 500 * time.Millisecond
 	UseExtendedProcfsResolutionKey     = "use-extended-procfs-resolution"
 	UseExtendedProcfsResolutionDefault = false
+	DomainDebugFilterKey               = "domain-debug-filter"
+	DomainDebugFilterDefault           = ""
 )
 
 func init() {
@@ -27,4 +29,5 @@ func init() {
 	viper.SetDefault(HostProcDirKey, HostProcDirDefault)
 	viper.SetDefault(HostsMappingRefreshIntervalKey, HostsMappingRefreshIntervalDefault)
 	viper.SetDefault(UseExtendedProcfsResolutionKey, UseExtendedProcfsResolutionDefault)
+	viper.SetDefault(DomainDebugFilterKey, DomainDebugFilterDefault)
 }
