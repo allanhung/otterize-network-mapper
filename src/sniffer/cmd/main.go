@@ -22,6 +22,7 @@ import (
 
 	"github.com/labstack/echo-contrib/echoprometheus"
 	sharedconfig "github.com/otterize/network-mapper/src/shared/config"
+	"github.com/otterize/network-mapper/src/sniffer/pkg/config"
 	"github.com/otterize/network-mapper/src/sniffer/pkg/sniffer"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -80,6 +81,12 @@ func main() {
 		defer errorreporter.AutoNotify()
 		return healthServer.Start(fmt.Sprintf(":%d", healthProbesPort))
 	})
+
+	// Log domain debug filter if set
+	domainDebugFilter := viper.GetString(config.DomainDebugFilterKey)
+	if domainDebugFilter != "" {
+		logrus.WithField("domain-debug-filter", domainDebugFilter).Info("Domain debug filter is enabled")
+	}
 
 	logrus.Debug("Starting sniffer")
 
