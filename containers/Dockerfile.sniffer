@@ -3,7 +3,7 @@ ARG OS="linux"
 
 FROM golang:1.23-alpine AS build
 ARG OIO_VERSIONTAG=25.11.1300
-ARG ONM_VERSIONTAG=25.11.1700
+ARG ONM_VERSIONTAG=26.01.1200
 ENV CGO_ENABLED=1
 RUN apk add --no-cache ca-certificates git protoc
 RUN apk add build-base libpcap-dev patch

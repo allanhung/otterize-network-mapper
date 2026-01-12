@@ -3,7 +3,7 @@ ARG OS="linux"
 
 FROM golang:1.23 AS build
 ARG OIO_VERSIONTAG=25.11.1300
-ARG ONM_VERSIONTAG=25.12.3002
+ARG ONM_VERSIONTAG=26.01.1200
 ENV CGO_ENABLED=0
 RUN mkdir -p /go/src/github.com/otterize
 RUN cd /go/src/github.com/otterize && git clone --depth 1 -b ${OIO_VERSIONTAG} https://github.com/allanhung/otterize-intents-operator intents-operator
