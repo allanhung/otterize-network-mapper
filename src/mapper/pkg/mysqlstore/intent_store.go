@@ -130,9 +130,19 @@ func (s *MySQLIntentStore) LogExternalTrafficIntentsCallback(ctx context.Context
 		ignoreClientSet[strings.TrimSpace(item)] = struct{}{}
 	}
 
+	ignoreNamespaces := strings.Split(s.config.ClientIgnoreListByNamespace, ",")
+	ignoreNamespaceSet := make(map[string]struct{}, len(ignoreNamespaces))
+	for _, item := range ignoreNamespaces {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			ignoreNamespaceSet[trimmed] = struct{}{}
+		}
+	}
+
 	for _, ti := range intents {
 		if hasExternalIP(ti.Intent.IPs) {
-			if _, ignored := ignoreClientSet[ti.Intent.Client.Name]; !ignored {
+			_, clientNameIgnored := ignoreClientSet[ti.Intent.Client.Name]
+			_, namespaceIgnored := ignoreNamespaceSet[ti.Intent.Client.Namespace]
+			if !clientNameIgnored && !namespaceIgnored {
 				exists := s.storeIntent(ctx, ti, today, yesterday)
 				if !exists {
 					hasNewIntent = true

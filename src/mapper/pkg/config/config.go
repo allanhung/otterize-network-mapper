@@ -66,6 +66,8 @@ const (
 	HttpWriteTimeoutDefault                   = 10 * time.Second
 	ClientIgnoreListByNameKey                 = "client-ignore-list-by-name"
 	ClientIgnoreListByNameDefault             = "coredns"
+	ClientIgnoreListByNamespaceKey            = "client-ignore-list-by-namespace"
+	ClientIgnoreListByNamespaceDefault        = ""
 	ClusterKey                                = "cluster"
 	ClusterDefault                            = "cluster.local"
 	DbEnabledKey                              = "db-enabled"
@@ -133,6 +135,7 @@ func init() {
 	viper.SetDefault(HttpReadTimeoutKey, HttpReadTimeoutDefault)
 	viper.SetDefault(HttpWriteTimeoutKey, HttpWriteTimeoutDefault)
 	viper.SetDefault(ClientIgnoreListByNameKey, ClientIgnoreListByNameDefault)
+	viper.SetDefault(ClientIgnoreListByNamespaceKey, ClientIgnoreListByNamespaceDefault)
 	viper.SetDefault(ClusterKey, ClusterDefault)
 	viper.SetDefault(DbEnabledKey, DbEnabledDefault)
 	viper.SetDefault(DbHostKey, DbHostDefault)
