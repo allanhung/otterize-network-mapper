@@ -91,6 +91,11 @@ func getClusterDomainOrDefault() string {
 }
 
 func main() {
+	viper.AddConfigPath("/etc/otterize")
+	if err := viper.ReadInConfig(); err != nil {
+		logrus.WithError(err).Warning("Failed to read config file")
+	}
+
 	logrus.SetLevel(logrus.InfoLevel)
 	if viper.GetBool(sharedconfig.DebugKey) {
 		logrus.SetLevel(logrus.DebugLevel)
